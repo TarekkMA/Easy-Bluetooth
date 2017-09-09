@@ -97,6 +97,7 @@ public class ListActivity extends AppCompatActivity {
         intent.putExtra(EXTRA_DEVICE_ADDRESS, selectedDevice.getAddress());
         intent.putExtra(EXTRA_DEVICE_NAME, selectedDevice.getName());
         setResult(RESULT_OK, intent);
+        easyBluetooth.stop();
         finish();
       }
     });
@@ -105,9 +106,6 @@ public class ListActivity extends AppCompatActivity {
       statusTextView.setText("Bluetooth is not supported");
       return;
     }
-
-    easyBluetooth.setOnBluetoothEnableChangedListener(bluetoothEnableChangedListener);
-    easyBluetooth.setOnDiceDiscoverListener(deviceDiscoverListener);
 
     if (easyBluetooth.isBluetoothEnabled()) {
       startDiscovery();
@@ -123,6 +121,16 @@ public class ListActivity extends AppCompatActivity {
 
   @Override protected void onDestroy() {
     super.onDestroy();
+  }
+
+  @Override protected void onResume() {
+    super.onResume();
+    easyBluetooth.setOnBluetoothEnableChangedListener(bluetoothEnableChangedListener);
+    easyBluetooth.setOnDiceDiscoverListener(deviceDiscoverListener);
+  }
+
+  @Override protected void onPause() {
+    super.onPause();
     easyBluetooth.stop();
   }
 }

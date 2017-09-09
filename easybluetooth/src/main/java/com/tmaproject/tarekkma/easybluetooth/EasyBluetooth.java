@@ -143,7 +143,11 @@ public class EasyBluetooth implements IEasyBluetooth {
     if (bluetoothAdapter.isDiscovering()) {
       bluetoothAdapter.cancelDiscovery();
     }
-    context.unregisterReceiver(deviceDiscoverReceiver);
+    try {
+      context.unregisterReceiver(deviceDiscoverReceiver);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
   }
 
   @Override public void setOnDiceDiscoverListener(OnDeviceDiscoverListener listener) {
@@ -151,7 +155,11 @@ public class EasyBluetooth implements IEasyBluetooth {
   }
 
   @Override public void stop() {
-    context.unregisterReceiver(stateChangedReciver);
+    try {
+      context.unregisterReceiver(stateChangedReciver);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
     stopDiscovery();
   }
 

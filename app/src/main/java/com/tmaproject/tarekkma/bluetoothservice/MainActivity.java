@@ -88,29 +88,6 @@ public class MainActivity extends AppCompatActivity {
       }
     });
 
-    easyBluetooth.setOnBluetoothEnableChangedListener(bluetoothEnableChangedListener);
-    easyBluetooth.setOnConnectionStateChangedListener(connectionStateChangeListener);
-
-    easyBluetooth.setDeviceConnectedListener(new OnDeviceConnectedListener() {
-      @Override public void connected(BluetoothDevice device) {
-        appendToTerminal("Connected to " + device.getName() + " ["+device.getAddress()+"]");
-        connectedDevice = device;
-      }
-    });
-    easyBluetooth.setOnConnectionStateChangedListener(new OnConnectionStateChangeListener() {
-      @Override public void connectionStateChanged(int state) {
-        appendToTerminal("Connection Lost !");
-        connectedDevice = null;
-      }
-    });
-    easyBluetooth.setMessageReceivedListener(new OnMessageReceivedListener() {
-      @Override public void messageReceived(String string) {
-        appendToTerminal(connectedDevice.getName() + " : " + string);
-      }
-    });
-
-
-
   }
 
   @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -131,4 +108,34 @@ public class MainActivity extends AppCompatActivity {
     terminal.append("\n"+s);
   }
 
+  @Override protected void onPause() {
+    super.onPause();
+
+    easyBluetooth.stop();
+  }
+
+  @Override protected void onResume() {
+    super.onResume();
+
+    easyBluetooth.setOnBluetoothEnableChangedListener(bluetoothEnableChangedListener);
+    easyBluetooth.setOnConnectionStateChangedListener(connectionStateChangeListener);
+
+    easyBluetooth.setDeviceConnectedListener(new OnDeviceConnectedListener() {
+      @Override public void connected(BluetoothDevice device) {
+        appendToTerminal("Connected to " + device.getName() + " ["+device.getAddress()+"]");
+        connectedDevice = device;
+      }
+    });
+    easyBluetooth.setOnConnectionStateChangedListener(new OnConnectionStateChangeListener() {
+      @Override public void connectionStateChanged(int state) {
+        appendToTerminal("Connection Lost !");
+        connectedDevice = null;
+      }
+    });
+    easyBluetooth.setMessageReceivedListener(new OnMessageReceivedListener() {
+      @Override public void messageReceived(String string) {
+        appendToTerminal(connectedDevice.getName() + " : " + string);
+      }
+    });
+  }
 }
