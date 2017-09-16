@@ -11,89 +11,65 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.BaseAdapter;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.TwoLineListItem;
-import com.tmaproject.tarekkma.easybluetooth.BluetoothStates;
+import com.tmaproject.tarekkma.easybluetooth.BtDevice;
 import com.tmaproject.tarekkma.easybluetooth.EasyBluetooth;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnBluetoothEnableChangedListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnDeviceDiscoverListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnDiscoveringListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnEnableChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.receviers.BluetoothDiscoveringReceiver;
+import com.tmaproject.tarekkma.easybluetooth.receviers.BluetoothEnableStateReceiver;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class ListActivity extends AppCompatActivity {
 
   public static final String EXTRA_DEVICE_ADDRESS = "EXTRA_DEVICE_ADDRESS";
   public static final String EXTRA_DEVICE_NAME = "EXTRA_DEVICE_NAME";
-  private EasyBluetooth easyBluetooth;
+
+  EasyBluetooth easyBluetooth;
+
   private TextView statusTextView;
   private ListView listView;
+  private ProgressBar progressBar;
 
-  private List<BluetoothDevice> deviceList = new ArrayList<>();
-  private ArrayAdapter<BluetoothDevice> arrayAdapter;
-
-  private OnDeviceDiscoverListener deviceDiscoverListener = new OnDeviceDiscoverListener() {
-    @Override public void discoverd(BluetoothDevice device) {
-      arrayAdapter.add(device);
-    }
-  };
-
-  private OnBluetoothEnableChangedListener bluetoothEnableChangedListener =
-      new OnBluetoothEnableChangedListener() {
-        @Override public void changed(int state) {
-          switch (state) {
-            case BluetoothAdapter.STATE_ON:
-              statusTextView.setText("Bluetooth is now on");
-              startDiscovery();
-              break;
-            case BluetoothAdapter.STATE_TURNING_ON:
-              statusTextView.setText("Bluetooth is turing on");
-              break;
-            case BluetoothAdapter.STATE_OFF:
-              statusTextView.setText("Bluetooth is now off");
-              break;
-            case BluetoothAdapter.STATE_TURNING_OFF:
-              statusTextView.setText("Bluetooth is turing off");
-              break;
-          }
-        }
-      };
+  private List<BtDevice> deviceList = new ArrayList<>();
+  private ArrayAdapter<BtDevice> arrayAdapter;
 
   @Override protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_list);
 
-    easyBluetooth = new EasyBluetooth(this);
+    easyBluetooth = new EasyBluetooth();
 
     statusTextView = (TextView) findViewById(R.id.status_text);
     listView = (ListView) findViewById(R.id.device_list);
+    progressBar = (ProgressBar) findViewById(R.id.progress);
 
-    arrayAdapter =
-        new ArrayAdapter<BluetoothDevice>(this, android.R.layout.simple_expandable_list_item_2,
-            android.R.id.text1, deviceList) {
-          @NonNull @Override
-          public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
-            TwoLineListItem view = (TwoLineListItem) super.getView(position, convertView, parent);
+    arrayAdapter = new ArrayAdapter<BtDevice>(this, android.R.layout.simple_expandable_list_item_2,
+        android.R.id.text1, deviceList) {
+      @NonNull @Override
+      public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+        TwoLineListItem view = (TwoLineListItem) super.getView(position, convertView, parent);
 
-            TextView name = view.findViewById(android.R.id.text1);
-            TextView mac = view.findViewById(android.R.id.text2);
+        TextView name = view.findViewById(android.R.id.text1);
+        TextView mac = view.findViewById(android.R.id.text2);
 
-            name.setText(deviceList.get(position).getName());
-            mac.setText(deviceList.get(position).getAddress());
+        name.setText(deviceList.get(position).getName());
+        mac.setText(deviceList.get(position).getAddress());
 
-            return view;
-          }
-        };
+        return view;
+      }
+    };
 
     listView.setAdapter(arrayAdapter);
 
     listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
       @Override public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
         Intent intent = new Intent();
-        BluetoothDevice selectedDevice = deviceList.get(position);
+        BtDevice selectedDevice = deviceList.get(position);
         intent.putExtra(EXTRA_DEVICE_ADDRESS, selectedDevice.getAddress());
         intent.putExtra(EXTRA_DEVICE_NAME, selectedDevice.getName());
         setResult(RESULT_OK, intent);
@@ -102,21 +78,53 @@ public class ListActivity extends AppCompatActivity {
       }
     });
 
-    if (!easyBluetooth.isBluetoothSupported()) {
+    if (!easyBluetooth.isSupported()) {
       statusTextView.setText("Bluetooth is not supported");
       return;
     }
 
-    if (easyBluetooth.isBluetoothEnabled()) {
+    if (easyBluetooth.isEnabled()) {
       startDiscovery();
-    } else {
-      easyBluetooth.requestEnableBluetooth(this);
+    }else {
+      statusTextView.setText("Please Enable your bluetooth");
     }
+
+    BluetoothEnableStateReceiver enableStateReceiver =
+        new BluetoothEnableStateReceiver(new OnEnableChangedListener() {
+          @Override public void onChanged(int state) {
+            switch (state) {
+              case BluetoothAdapter.STATE_ON:
+                statusTextView.setText("Bluetooth is now on");
+                startDiscovery();
+                break;
+              case BluetoothAdapter.STATE_TURNING_ON:
+                statusTextView.setText("Bluetooth is turing on");
+                break;
+              case BluetoothAdapter.STATE_OFF:
+                statusTextView.setText("Bluetooth is now off");
+                break;
+              case BluetoothAdapter.STATE_TURNING_OFF:
+                statusTextView.setText("Bluetooth is turing off");
+                break;
+            }
+          }
+        });
+    registerReceiver(enableStateReceiver, BluetoothDiscoveringReceiver.getIntentFilter());
   }
 
   private void startDiscovery() {
-    statusTextView.setText("Searching for deceives");
-    easyBluetooth.startDiscovery();
+    BluetoothDiscoveringReceiver discoveringReceiver =
+        new BluetoothDiscoveringReceiver(new OnDiscoveringListener() {
+          @Override public void onDiscovered(BtDevice device) {
+            arrayAdapter.add(device);
+          }
+
+          @Override public void onDiscoveredFinished() {
+            progressBar.setVisibility(View.GONE);
+            statusTextView.setText("Finished Searching");
+          }
+        });
+    registerReceiver(discoveringReceiver, BluetoothDiscoveringReceiver.getIntentFilter());
   }
 
   @Override protected void onDestroy() {
@@ -125,12 +133,9 @@ public class ListActivity extends AppCompatActivity {
 
   @Override protected void onResume() {
     super.onResume();
-    easyBluetooth.setOnBluetoothEnableChangedListener(bluetoothEnableChangedListener);
-    easyBluetooth.setOnDiceDiscoverListener(deviceDiscoverListener);
   }
 
   @Override protected void onPause() {
     super.onPause();
-    easyBluetooth.stop();
   }
 }

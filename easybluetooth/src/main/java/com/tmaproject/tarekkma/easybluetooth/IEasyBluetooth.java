@@ -1,10 +1,9 @@
 package com.tmaproject.tarekkma.easybluetooth;
 
-import android.app.Activity;
-import android.bluetooth.BluetoothDevice;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnBluetoothEnableChangedListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnDeviceDiscoverListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionStateChangeListener;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnDiscoveringListener;
+import java.util.List;
 
 /**
  * Created by tarekkma on 9/9/17.
@@ -12,26 +11,28 @@ import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionStateChangeLi
 
 public interface IEasyBluetooth {
 
+  void start();
   void stop();
 
-  int getState();
-  void setOnConnectionStateChangedListener(OnConnectionStateChangeListener listener);
 
-  boolean isBluetoothSupported();
-  boolean isBluetoothEnabled();
+  boolean isSupported();
+  boolean isEnabled();
 
-  void requestEnableBluetooth(Activity activity);
+  String getMyDeviceName();
+  String getMyDeviceAddress();
 
-  void setOnBluetoothEnableChangedListener(OnBluetoothEnableChangedListener listener);
+  void requestEnable(Context context);
 
-  void startDiscovery();
-  void stopDiscovery();
-  void setOnDiceDiscoverListener(OnDeviceDiscoverListener listener);
+  List<BtDevice> getPairedDevices();
 
-  void connect(BluetoothDevice device);
-  void connect(String macAddress);
+  void connect(String address);
+  void connect(BtDevice btDevice);
 
   void write(String string);
-  void writeln(String string);
+  void write(byte[] bytes);
+
+  boolean isConnected();
+  BtDevice getConnectedDevice();
+
 
 }

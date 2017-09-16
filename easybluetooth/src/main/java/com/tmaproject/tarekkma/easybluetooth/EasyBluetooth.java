@@ -1,6 +1,5 @@
 package com.tmaproject.tarekkma.easybluetooth;
 
-import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -8,268 +7,189 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.util.Log;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnBluetoothEnableChangedListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionLostListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnDeviceConnectedListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnDeviceDiscoverListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionStateChangeListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnMessageReceivedListener;
+import android.os.Handler;
+import android.os.Message;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnDiscoveringListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnMessageReceived;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnStateChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.threads.ConnectThread;
+import com.tmaproject.tarekkma.easybluetooth.threads.ConnectedThread;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
-import static android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED;
-import static android.bluetooth.BluetoothAdapter.EXTRA_STATE;
-import static android.bluetooth.BluetoothDevice.ACTION_NAME_CHANGED;
+import static com.tmaproject.tarekkma.easybluetooth.States.STATE_CONNECTED;
+import static com.tmaproject.tarekkma.easybluetooth.States.STATE_CONNECTING;
+import static com.tmaproject.tarekkma.easybluetooth.States.STATE_NONE;
 
 /**
- * Created by tarekkma on 9/9/17.
- */
-
-/**
- * https://github.com/googlesamples/android-BluetoothChat/blob/master/Application/src/main/java/com/example/android/bluetoothchat/BluetoothChatService.java
+ * Created by tarekkma on 9/15/17.
  */
 
 public class EasyBluetooth implements IEasyBluetooth {
-  private static final String TAG = "EasyBluetooth";
 
-  /**
-   * UUID for communicating with SerialDevices
-   *
-   * @see <a href="https://developer.android.com/reference/android/bluetooth/BluetoothDevice.html#createRfcommSocketToServiceRecord(java.util.UUID)">createRfcommSocketToServiceRecord(java.util.UUID)</a>
-   */
-  public static final String SPP_UUID = "00001101-0000-1000-8000-00805F9B34FB";
-  private static final int REQUEST_ENABLE_BT = 912;
+  private BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+  private OnConnectionChangedListener onConnectionChangedListener;
+  private OnStateChangedListener onStateChangedListener;
+  private OnMessageReceived onMessageReceived;
+  private BtDevice connectedDevice = null;
+  private ConnectedThread mConnectedThread;
+  private ConnectThread mConnectThread;
+  private int mState;
+  private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
-  private BluetoothAdapter bluetoothAdapter;
-  private Context context;
-  private int state;
+  @Override public void start() {
 
-  private ConnectThread connectThread = null;
-  private ConnectedThread connectedThread = null;
-
-  private OnBluetoothEnableChangedListener stateChangedListener;
-  private OnDeviceDiscoverListener deviceDiscoverListener;
-  private OnConnectionStateChangeListener connectionStateChangeListener;
-  private OnDeviceConnectedListener deviceConnectedListener;
-  private OnMessageReceivedListener messageReceivedListener;
-  private OnConnectionLostListener connectionLostListener;
-
-  private final BroadcastReceiver stateChangedReciver = new BroadcastReceiver() {
-    @Override public void onReceive(Context context, Intent intent) {
-      if (ACTION_STATE_CHANGED.equals(intent.getAction())) {
-        if (stateChangedListener != null) {
-          int state = intent.getIntExtra(EXTRA_STATE, -1);
-          stateChangedListener.changed(state);
-        }
-      }
-    }
-  };
-
-  private final BroadcastReceiver deviceDiscoverReceiver = new BroadcastReceiver() {
-    public void onReceive(Context context, Intent intent) {
-      String action = intent.getAction();
-      if (BluetoothDevice.ACTION_FOUND.equals(action) || ACTION_NAME_CHANGED.equals(action)) {
-        BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-        deviceDiscoverListener.discoverd(device);
-      }
-    }
-  };
-
-  public EasyBluetooth(Context context) {
-    this.context = context;
-    bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-    setState(BluetoothStates.STATE_NONE);
-  }
-
-  private synchronized void setState(int state) {
-    this.state = state;
-    if (connectionStateChangeListener != null) {
-      connectionStateChangeListener.connectionStateChanged(state);
-    }
-  }
-
-  @Override public int getState() {
-    return state;
-  }
-
-  @Override
-  public void setOnConnectionStateChangedListener(OnConnectionStateChangeListener listener) {
-    connectionStateChangeListener = listener;
-  }
-
-  @Override public boolean isBluetoothSupported() {
-    return bluetoothAdapter != null;
-  }
-
-  @Override public boolean isBluetoothEnabled() {
-    return bluetoothAdapter.isEnabled();
-  }
-
-  @Override
-  public void setOnBluetoothEnableChangedListener(OnBluetoothEnableChangedListener listener) {
-    stateChangedListener = listener;
-    IntentFilter filter = new IntentFilter(ACTION_STATE_CHANGED);
-    context.registerReceiver(stateChangedReciver, filter);
-  }
-
-  public void setDeviceConnectedListener(OnDeviceConnectedListener deviceConnectedListener) {
-    this.deviceConnectedListener = deviceConnectedListener;
-  }
-
-  public void setConnectionLostListener(OnConnectionLostListener connectionLostListener) {
-    this.connectionLostListener = connectionLostListener;
-  }
-
-  public void setMessageReceivedListener(OnMessageReceivedListener messageReceivedListener) {
-    this.messageReceivedListener = messageReceivedListener;
-  }
-
-  @Override public void requestEnableBluetooth(Activity activity) {
-    Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-    activity.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-  }
-
-  @Override public void startDiscovery() {
-    if (!bluetoothAdapter.isDiscovering()) {
-      bluetoothAdapter.startDiscovery();
-    }
-    // ACTION_FOUND need ACCESS_COARSE_LOCATION permission
-    // ACTION_NAME_CHANGED may do the same as ACTION_FOUND without permission
-    IntentFilter filter = new IntentFilter(BluetoothDevice.ACTION_FOUND);
-    filter.addAction(ACTION_NAME_CHANGED);
-    context.registerReceiver(deviceDiscoverReceiver, filter);
-  }
-
-  @Override public void stopDiscovery() {
-    if (bluetoothAdapter.isDiscovering()) {
-      bluetoothAdapter.cancelDiscovery();
-    }
-    try {
-      context.unregisterReceiver(deviceDiscoverReceiver);
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-  }
-
-  @Override public void setOnDiceDiscoverListener(OnDeviceDiscoverListener listener) {
-    deviceDiscoverListener = listener;
   }
 
   @Override public void stop() {
-    try {
-      context.unregisterReceiver(stateChangedReciver);
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-    stopDiscovery();
+
   }
 
-  @Override public void connect(BluetoothDevice device) {
+  @Override public boolean isSupported() {
+    return bluetoothAdapter != null;
+  }
 
-    Log.d(TAG,
-        "Trying to connect to device name :" + device.getName() + ", MAC :" + device.getAddress());
+  @Override public boolean isEnabled() {
+    return bluetoothAdapter.isEnabled();
+  }
 
+  @Override public void requestEnable(Context context) {
+
+  }
+
+  @Override public String getMyDeviceName() {
+    return bluetoothAdapter.getName();
+  }
+
+  @Override public String getMyDeviceAddress() {
+    return bluetoothAdapter.getAddress();
+  }
+
+  @Override public List<BtDevice> getPairedDevices() {
+    List<BtDevice> paired = new ArrayList<>();
+    Set<BluetoothDevice> bondedDevices = bluetoothAdapter.getBondedDevices();
+    for (BluetoothDevice device : bondedDevices) {
+      paired.add(new BtDevice(device));
+    }
+    return paired;
+  }
+
+  @Override public void connect(String address) {
+    connect(new BtDevice(bluetoothAdapter.getRemoteDevice(address)));
+  }
+
+  @Override public void connect(BtDevice btDevice) {
     // Cancel any thread attempting to make a connection
-    if (getState() == BluetoothStates.STATE_CONNECTING && connectThread != null) {
-      connectThread.cancel();
-      connectThread = null;
-      Log.d(TAG, "connect: Canceled connectThread");
+    if (mState == STATE_CONNECTING) {
+      if (mConnectThread != null) {
+        mConnectThread.cancel();
+        mConnectThread = null;
+      }
     }
 
     // Cancel any thread currently running a connection
-    if (connectedThread != null) {
-      connectedThread.cancel();
-      connectedThread = null;
-      Log.d(TAG, "connect: Canceled connectedThread");
+    if (mConnectedThread != null) {
+      mConnectedThread.cancel();
+      mConnectedThread = null;
     }
 
-    // Setup the thread to connect with the given device
-    connectThread = new ConnectThread(SPP_UUID, device, bluetoothAdapter);
-
-    connectThread.setStateChangeListener(new OnConnectionStateChangeListener() {
-      @Override public void connectionStateChanged(int state) {
-        setState(state);
-      }
-    });
-
-    connectThread.setConnectedListener(new ConnectThread.ConnectedListener() {
-      @Override public void onConnected(BluetoothDevice device, BluetoothSocket socket) {
-        Log.d(TAG,
-            "Connected to device name :" + device.getName() + ", MAC :" + device.getAddress());
-        setState(BluetoothStates.STATE_CONNECTED);
-        connected(socket,device);
-      }
-    });
-
-    connectThread.setConnectionFailedListener(new ConnectThread.ConnectionFailedListener() {
-      @Override public void connectionFailed(Exception e) {
-        Log.e(TAG, "connectionFailed: ", e);
-        setState(BluetoothStates.STATE_CONNECTION_FAILED);
-      }
-    });
-    // Start connect thread
-    connectThread.start();
+    // Start the thread to connect with the given device
+    mConnectThread = new ConnectThread(btDevice.getDevice(), bluetoothAdapter, SPP_UUID, mHandler);
+    mConnectThread.start();
   }
 
-  @Override public void connect(String macAddress) {
-    BluetoothDevice device = bluetoothAdapter.getRemoteDevice(macAddress);
-    connect(device);
+  @Override public boolean isConnected() {
+    return connectedDevice != null;
   }
 
-  public synchronized void connected(BluetoothSocket socket, BluetoothDevice device) {
+  private void conneceted(BluetoothSocket socket){
+
     // Cancel the thread that completed the connection
-    if (connectThread != null) {
-      connectThread.cancel();
-      connectThread = null;
+    if (mConnectThread != null) {
+      mConnectThread.cancel();
+      mConnectThread = null;
     }
 
     // Cancel any thread currently running a connection
-    if (connectedThread != null) {
-      connectedThread.disconnect();
-      connectedThread.cancel();
-      connectedThread = null;
+    if (mConnectedThread != null) {
+      mConnectedThread.cancel();
+      mConnectedThread = null;
     }
 
     // Start the thread to manage the connection and perform transmissions
-    connectedThread = new ConnectedThread(socket);
+    mConnectedThread = new ConnectedThread(socket,mHandler);
+    mConnectedThread.start();
 
-    connectedThread.setConnectionStateChangeListener(new OnConnectionStateChangeListener() {
-      @Override public void connectionStateChanged(int state) {
-        setState(state);
-      }
-    });
+  }
 
-    connectedThread.setConnectionLostListener(new OnConnectionLostListener() {
-      @Override public void connectionLost() {
-        setState(BluetoothStates.STATE_DISCONNECTED);
-        if (connectionLostListener != null) {
-          connectionLostListener.connectionLost();
-        }
-      }
-    });
-
-    connectedThread.setMessageReceivedListener(new OnMessageReceivedListener() {
-      @Override public void messageReceived(String string) {
-        if(messageReceivedListener != null){
-          messageReceivedListener.messageReceived(string);
-        }
-      }
-    });
-
-    connectedThread.start();
-
-    // Send the name of the onConnected device back to the UI Activity
-    if (deviceConnectedListener != null) {
-      deviceConnectedListener.connected(device);
-    }
+  @Override public void write(byte[] bytes) {
+    if (mState != STATE_CONNECTED) return;
+    mConnectedThread.write(bytes);
   }
 
   @Override public void write(String string) {
-    if (connectedThread != null) {
-      connectedThread.write(string.getBytes());
+    write(string.getBytes());
+  }
+
+  public void setOnConnectionChangedListener(
+      OnConnectionChangedListener onConnectionChangedListener) {
+    this.onConnectionChangedListener = onConnectionChangedListener;
+  }
+
+  public void setOnStateChangedListener(OnStateChangedListener onStateChangedListener) {
+    this.onStateChangedListener = onStateChangedListener;
+  }
+
+  public void setOnMessageReceived(OnMessageReceived onMessageReceived) {
+    this.onMessageReceived = onMessageReceived;
+  }
+
+  private void setState(int mState) {
+    this.mState = mState;
+    if (onStateChangedListener != null) {
+      onStateChangedListener.onChanged(mState);
     }
   }
 
-  @Override public void writeln(String string) {
-    write(string + "\r\n");
+  @Override public BtDevice getConnectedDevice() {
+    return connectedDevice;
   }
+
+  private final Handler mHandler = new Handler() {
+    @Override public void handleMessage(Message msg) {
+      super.handleMessage(msg);
+      switch (msg.what) {
+        case HandlerKeys.STATE:
+          setState((Integer) msg.obj);
+          break;
+        case HandlerKeys.CONNECTED:
+          mConnectThread = null;
+          ConnectThread.ConnectedBundle connectedBundle = (ConnectThread.ConnectedBundle) msg.obj;
+          conneceted(connectedBundle.socket);
+          if (onConnectionChangedListener != null) {
+            onConnectionChangedListener.onConnected(new BtDevice(connectedBundle.device));
+          }
+          break;
+        case HandlerKeys.CONNECTION_FAILED:
+          mState = STATE_NONE;
+          if (onConnectionChangedListener != null) {
+            onConnectionChangedListener.onConnectionFailed();
+          }
+          break;
+        case HandlerKeys.CONNECTION_LOST:
+          if (onConnectionChangedListener != null) {
+            onConnectionChangedListener.onDisconnected();
+          }
+          break;
+        case HandlerKeys.MESSAGE_RECEIVED:
+          if (onMessageReceived != null) {
+            onMessageReceived.onReceived((byte[]) msg.obj);
+          }
+          break;
+      }
+    }
+  };
 }

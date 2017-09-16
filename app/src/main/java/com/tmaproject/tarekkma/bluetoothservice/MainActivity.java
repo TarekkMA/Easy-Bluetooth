@@ -5,17 +5,21 @@ import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
+import com.tmaproject.tarekkma.easybluetooth.BtDevice;
 import com.tmaproject.tarekkma.easybluetooth.EasyBluetooth;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnBluetoothEnableChangedListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionStateChangeListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnDeviceConnectedListener;
-import com.tmaproject.tarekkma.easybluetooth.listeners.OnMessageReceivedListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnEnableChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnMessageReceived;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnStateChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.receviers.BluetoothDiscoveringReceiver;
+import com.tmaproject.tarekkma.easybluetooth.receviers.BluetoothEnableStateReceiver;
 
-import static com.tmaproject.tarekkma.easybluetooth.BluetoothStates.*;
+import static com.tmaproject.tarekkma.easybluetooth.States.*;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -28,44 +32,37 @@ public class MainActivity extends AppCompatActivity {
   Button connect;
   Button send;
 
-  private BluetoothDevice connectedDevice;
+  private BtDevice connectedDevice;
 
-  private OnBluetoothEnableChangedListener bluetoothEnableChangedListener =
-      new OnBluetoothEnableChangedListener() {
-        @Override public void changed(int state) {
-          switch (state) {
-            case BluetoothAdapter.STATE_ON:
-              appendToTerminal("Bluetooth is now on");
-              break;
-            case BluetoothAdapter.STATE_TURNING_ON:
-              appendToTerminal("Bluetooth is turing on");
-              break;
-            case BluetoothAdapter.STATE_OFF:
-              appendToTerminal("Bluetooth is now off");
-              break;
-            case BluetoothAdapter.STATE_TURNING_OFF:
-              appendToTerminal("Bluetooth is turing off");
-              break;
-          }
-        }
-      };
+  private OnEnableChangedListener onEnableChangedListener = new OnEnableChangedListener() {
+    @Override public void onChanged(int state) {
+      switch (state) {
+        case BluetoothAdapter.STATE_ON:
+          appendToTerminal("Bluetooth is now on");
+          break;
+        case BluetoothAdapter.STATE_TURNING_ON:
+          appendToTerminal("Bluetooth is turing on");
+          break;
+        case BluetoothAdapter.STATE_OFF:
+          appendToTerminal("Bluetooth is now off");
+          break;
+        case BluetoothAdapter.STATE_TURNING_OFF:
+          appendToTerminal("Bluetooth is turing off");
+          break;
+      }
+    }
+  };
 
-  private OnConnectionStateChangeListener connectionStateChangeListener = new OnConnectionStateChangeListener() {
-    @Override public void connectionStateChanged(int state) {
+  private OnStateChangedListener onStateChangedListener = new OnStateChangedListener() {
+    @Override public void onChanged(int state) {
       switch (state) {
         case STATE_NONE:
-          break;
-        case STATE_CONNECTION_FAILED:
-          appendToTerminal("Connection Failed !");
           break;
         case STATE_CONNECTING:
           appendToTerminal("Connecting...");
           break;
         case STATE_CONNECTED:
           appendToTerminal("Connected");
-          break;
-        case STATE_DISCONNECTED:
-          appendToTerminal("Disconnected !");
           break;
       }
     }
@@ -75,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_main);
 
-    easyBluetooth = new EasyBluetooth(this);
+    easyBluetooth = new EasyBluetooth();
 
     input = (EditText) findViewById(R.id.input);
     terminal = (TextView) findViewById(R.id.terminal_text);
@@ -84,28 +81,37 @@ public class MainActivity extends AppCompatActivity {
 
     connect.setOnClickListener(new View.OnClickListener() {
       @Override public void onClick(View v) {
-        startActivityForResult(new Intent(MainActivity.this,ListActivity.class),REQUEST_BT_DISCOVER);
+        startActivityForResult(new Intent(MainActivity.this, ListActivity.class),
+            REQUEST_BT_DISCOVER);
       }
     });
 
+    send.setOnClickListener(new View.OnClickListener() {
+      @Override public void onClick(View v) {
+        if(!TextUtils.isEmpty(input.getText())){
+          easyBluetooth.write(input.getText().toString());
+          input.setText("");
+        }
+      }
+    });
   }
 
   @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
-    if(requestCode == REQUEST_BT_DISCOVER){
-      if(resultCode == RESULT_OK){
+    if (requestCode == REQUEST_BT_DISCOVER) {
+      if (resultCode == RESULT_OK) {
         String mac = data.getStringExtra(ListActivity.EXTRA_DEVICE_ADDRESS);
         String name = data.getStringExtra(ListActivity.EXTRA_DEVICE_NAME);
-        if(mac!=null){
+        if (mac != null) {
           easyBluetooth.connect(mac);
-          appendToTerminal("Trying to connect to " + name + " ["+mac+"]");
+          appendToTerminal("Trying to connect to " + name + " [" + mac + "]");
         }
       }
     }
   }
 
-  private void appendToTerminal(String s){
-    terminal.append("\n"+s);
+  private void appendToTerminal(String s) {
+    terminal.append("\n" + s);
   }
 
   @Override protected void onPause() {
@@ -117,24 +123,28 @@ public class MainActivity extends AppCompatActivity {
   @Override protected void onResume() {
     super.onResume();
 
-    easyBluetooth.setOnBluetoothEnableChangedListener(bluetoothEnableChangedListener);
-    easyBluetooth.setOnConnectionStateChangedListener(connectionStateChangeListener);
+    BluetoothEnableStateReceiver enableStateReceiver = new BluetoothEnableStateReceiver(onEnableChangedListener);
+    registerReceiver(enableStateReceiver, BluetoothDiscoveringReceiver.getIntentFilter());
 
-    easyBluetooth.setDeviceConnectedListener(new OnDeviceConnectedListener() {
-      @Override public void connected(BluetoothDevice device) {
-        appendToTerminal("Connected to " + device.getName() + " ["+device.getAddress()+"]");
+    easyBluetooth.setOnConnectionChangedListener(new OnConnectionChangedListener() {
+      @Override public void onConnected(BtDevice device) {
+        appendToTerminal("Connected to " + device.getName() + " [" + device.getAddress() + "]");
         connectedDevice = device;
       }
-    });
-    easyBluetooth.setOnConnectionStateChangedListener(new OnConnectionStateChangeListener() {
-      @Override public void connectionStateChanged(int state) {
+
+      @Override public void onDisconnected() {
         appendToTerminal("Connection Lost !");
         connectedDevice = null;
       }
+
+      @Override public void onConnectionFailed() {
+        appendToTerminal("Connection Failed !");
+      }
     });
-    easyBluetooth.setMessageReceivedListener(new OnMessageReceivedListener() {
-      @Override public void messageReceived(String string) {
-        appendToTerminal(connectedDevice.getName() + " : " + string);
+
+    easyBluetooth.setOnMessageReceived(new OnMessageReceived() {
+      @Override public void onReceived(byte[] message) {
+        appendToTerminal(connectedDevice.getName() + " : " + new String(message));
       }
     });
   }

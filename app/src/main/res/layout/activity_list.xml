@@ -10,14 +10,30 @@
     tools:context="com.tmaproject.tarekkma.bluetoothservice.ListActivity"
     >
 
-  <TextView
-      android:id="@+id/status_text"
+
+  <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
       android:gravity="center"
-      android:textSize="18sp"
-      tools:text="Please enable bluetooth"
-      />
+      >
+
+    <TextView
+        android:id="@+id/status_text"
+        android:layout_width="0dp"
+        android:layout_weight="1"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textSize="18sp"
+        android:text="Please enable bluetooth"
+        />
+
+    <ProgressBar
+        android:id="@+id/progress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        />
+
+  </LinearLayout>
 
   <ListView
       android:id="@+id/device_list"
