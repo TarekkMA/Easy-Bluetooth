@@ -2,6 +2,7 @@ package com.tmaproject.tarekkma.bluetoothservice;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -85,12 +86,12 @@ public class ListActivity extends AppCompatActivity {
 
     if (easyBluetooth.isEnabled()) {
       startDiscovery();
-    }else {
+    } else {
       statusTextView.setText("Please Enable your bluetooth");
     }
 
-    BluetoothEnableStateReceiver enableStateReceiver =
-        new BluetoothEnableStateReceiver(new OnEnableChangedListener() {
+    BroadcastReceiver dreciver =
+        easyBluetooth.registerEnableStateReciver(this, new OnEnableChangedListener() {
           @Override public void onChanged(int state) {
             switch (state) {
               case BluetoothAdapter.STATE_ON:
@@ -109,22 +110,27 @@ public class ListActivity extends AppCompatActivity {
             }
           }
         });
-    registerReceiver(enableStateReceiver, BluetoothDiscoveringReceiver.getIntentFilter());
+
   }
 
   private void startDiscovery() {
-    BluetoothDiscoveringReceiver discoveringReceiver =
-        new BluetoothDiscoveringReceiver(new OnDiscoveringListener() {
-          @Override public void onDiscovered(BtDevice device) {
-            arrayAdapter.add(device);
-          }
+    progressBar.setVisibility(View.VISIBLE);
+    statusTextView.setText("Searching for devices");
 
-          @Override public void onDiscoveredFinished() {
-            progressBar.setVisibility(View.GONE);
-            statusTextView.setText("Finished Searching");
-          }
-        });
-    registerReceiver(discoveringReceiver, BluetoothDiscoveringReceiver.getIntentFilter());
+    for (BtDevice btDevice : easyBluetooth.getPairedDevices()) {
+      arrayAdapter.add(btDevice);
+    }
+
+    easyBluetooth.registerDiscoingReceiver(this,new OnDiscoveringListener() {
+      @Override public void onDiscovered(BtDevice device) {
+        arrayAdapter.add(device);
+      }
+
+      @Override public void onDiscoveredFinished() {
+        progressBar.setVisibility(View.GONE);
+        statusTextView.setText("Finished Searching");
+      }
+    });
   }
 
   @Override protected void onDestroy() {

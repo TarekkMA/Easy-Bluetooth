@@ -1,18 +1,21 @@
 package com.tmaproject.tarekkma.easybluetooth;
 
+import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.Message;
 import com.tmaproject.tarekkma.easybluetooth.listeners.OnConnectionChangedListener;
 import com.tmaproject.tarekkma.easybluetooth.listeners.OnDiscoveringListener;
+import com.tmaproject.tarekkma.easybluetooth.listeners.OnEnableChangedListener;
 import com.tmaproject.tarekkma.easybluetooth.listeners.OnMessageReceived;
 import com.tmaproject.tarekkma.easybluetooth.listeners.OnStateChangedListener;
+import com.tmaproject.tarekkma.easybluetooth.receviers.BluetoothDiscoveringReceiver;
+import com.tmaproject.tarekkma.easybluetooth.receviers.BluetoothEnableStateReceiver;
 import com.tmaproject.tarekkma.easybluetooth.threads.ConnectThread;
 import com.tmaproject.tarekkma.easybluetooth.threads.ConnectedThread;
 import java.util.ArrayList;
@@ -30,6 +33,7 @@ import static com.tmaproject.tarekkma.easybluetooth.States.STATE_NONE;
 
 public class EasyBluetooth implements IEasyBluetooth {
 
+  public static final int REQUEST_ENABLE_BT = 7676;
   private BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
   private OnConnectionChangedListener onConnectionChangedListener;
   private OnStateChangedListener onStateChangedListener;
@@ -40,34 +44,102 @@ public class EasyBluetooth implements IEasyBluetooth {
   private int mState;
   private static final UUID SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
 
-  @Override public void start() {
-
-  }
-
+  /**
+   * Stopping all threads
+   */
   @Override public void stop() {
+    if (mConnectThread != null) {
+      mConnectThread.cancel();
+      mConnectThread = null;
+    }
 
+    if (mConnectedThread != null) {
+      mConnectedThread.cancel();
+      mConnectedThread = null;
+    }
+
+    setState(STATE_NONE);
   }
 
+  /**
+   * Checks if bluetooth is supported or not
+   * @return is bluetooth supported
+   */
   @Override public boolean isSupported() {
     return bluetoothAdapter != null;
   }
 
+  /**
+   * Checks if bluetooth is enabled or not
+   * @return is bluetooth enabled
+   */
   @Override public boolean isEnabled() {
     return bluetoothAdapter.isEnabled();
   }
 
-  @Override public void requestEnable(Context context) {
-
+  /**
+   * Requests from user to enable bluetooth and returning result to the activity
+   * @param activity the activity which will have results
+   */
+  @Override public void requestEnableWithResults(Activity activity) {
+    Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+    activity.startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
   }
 
+  /**
+   * request from user to enable bluetooth
+   * @param context context that will start request activity
+   */
+  @Override public void requestEnable(Context context) {
+    Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+    context.startActivity(enableBtIntent);
+  }
+
+  /**
+   * Register Broadcast Receiver for new discovered devices
+   * @param context context to register on
+   * @param listener notify listeners to events like when device discovered
+   * @return the registered BroadcastReceiver , remember to unregister it using unregisterReceiver(receiver);
+   */
+  @Override public BroadcastReceiver registerDiscoingReceiver(Context context,OnDiscoveringListener listener) {
+    BluetoothDiscoveringReceiver receiver = new BluetoothDiscoveringReceiver(listener);
+    context.registerReceiver(receiver,BluetoothDiscoveringReceiver.getIntentFilter());
+    return receiver;
+  }
+
+  /**
+   * Register Broadcast Receiver for listening to bluetooth enable state
+   * @param context context to register on
+   * @param listener notify listeners to events
+   * @return the registered BroadcastReceiver , remember to unregister it using unregisterReceiver(receiver);
+   */
+  @Override public BroadcastReceiver registerEnableStateReciver(Context context,
+      OnEnableChangedListener listener) {
+    BluetoothEnableStateReceiver receiver = new BluetoothEnableStateReceiver(listener);
+    context.registerReceiver(receiver,BluetoothEnableStateReceiver.getIntentFilter());
+    return receiver;
+  }
+
+  /**
+   * Gets current device name
+   * @return device name
+   */
   @Override public String getMyDeviceName() {
     return bluetoothAdapter.getName();
   }
 
+  /**
+   * Gets current device MAC address
+   * @return device MAC address
+   */
   @Override public String getMyDeviceAddress() {
     return bluetoothAdapter.getAddress();
   }
 
+  /**
+   * Gets list of paired ,bonded, devices
+   * @return List of paired devices
+   */
   @Override public List<BtDevice> getPairedDevices() {
     List<BtDevice> paired = new ArrayList<>();
     Set<BluetoothDevice> bondedDevices = bluetoothAdapter.getBondedDevices();
@@ -77,10 +149,18 @@ public class EasyBluetooth implements IEasyBluetooth {
     return paired;
   }
 
+  /**
+   * Connect to device using it's MAC address
+   * @param address MAC Address
+   */
   @Override public void connect(String address) {
     connect(new BtDevice(bluetoothAdapter.getRemoteDevice(address)));
   }
 
+  /**
+   * Connect to BtDevice
+   * @param btDevice
+   */
   @Override public void connect(BtDevice btDevice) {
     // Cancel any thread attempting to make a connection
     if (mState == STATE_CONNECTING) {
@@ -101,11 +181,15 @@ public class EasyBluetooth implements IEasyBluetooth {
     mConnectThread.start();
   }
 
+  /**
+   * Gets connected status
+   * @return connected status
+   */
   @Override public boolean isConnected() {
     return connectedDevice != null;
   }
 
-  private void conneceted(BluetoothSocket socket){
+  private void connected(BluetoothSocket socket){
 
     // Cancel the thread that completed the connection
     if (mConnectThread != null) {
@@ -125,11 +209,19 @@ public class EasyBluetooth implements IEasyBluetooth {
 
   }
 
+  /**
+   * Send data to connected device
+   * @param bytes
+   */
   @Override public void write(byte[] bytes) {
     if (mState != STATE_CONNECTED) return;
     mConnectedThread.write(bytes);
   }
 
+  /**
+   * Send data to connected device
+   * @param string
+   */
   @Override public void write(String string) {
     write(string.getBytes());
   }
@@ -168,7 +260,7 @@ public class EasyBluetooth implements IEasyBluetooth {
         case HandlerKeys.CONNECTED:
           mConnectThread = null;
           ConnectThread.ConnectedBundle connectedBundle = (ConnectThread.ConnectedBundle) msg.obj;
-          conneceted(connectedBundle.socket);
+          connected(connectedBundle.socket);
           if (onConnectionChangedListener != null) {
             onConnectionChangedListener.onConnected(new BtDevice(connectedBundle.device));
           }
