@@ -261,8 +261,9 @@ public class EasyBluetooth implements IEasyBluetooth {
           mConnectThread = null;
           ConnectThread.ConnectedBundle connectedBundle = (ConnectThread.ConnectedBundle) msg.obj;
           connected(connectedBundle.socket);
+          connectedDevice = new BtDevice(connectedBundle.device);
           if (onConnectionChangedListener != null) {
-            onConnectionChangedListener.onConnected(new BtDevice(connectedBundle.device));
+            onConnectionChangedListener.onConnected(connectedDevice);
           }
           break;
         case HandlerKeys.CONNECTION_FAILED:
@@ -272,6 +273,7 @@ public class EasyBluetooth implements IEasyBluetooth {
           }
           break;
         case HandlerKeys.CONNECTION_LOST:
+          connectedDevice = null;
           if (onConnectionChangedListener != null) {
             onConnectionChangedListener.onDisconnected();
           }
